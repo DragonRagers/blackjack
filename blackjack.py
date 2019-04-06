@@ -79,6 +79,13 @@ class Hand:
     def bust(self):
         return self.value() > 21
 
+    def hardValue(self):
+        a,b = self.values()
+        if not a == b:
+            return 0,max(a,b)
+        else:
+            return 1,a
+
     def __str__(self):
         cards = []
         for card in self.cards:
@@ -105,13 +112,11 @@ class Game:
         self.player.hit()
         self.player.hit()
 
+
     def state(self):
-        cardState = [0]*12
-        #cardState = np.array([0]*12)
-        for i, card in enumerate(self.player.cards):
-            cardState[i] = card.rank
-        cardState[11] = self.dealer.cards[0].rank
-        return cardState
+        hard, value = self.player.hardValue()
+        state = [hard, value, self.dealer.value()]
+        return state
 
     def pPlay(self):
         self.player.hit()
@@ -155,17 +160,6 @@ def main():
     game.pPlay()
     game.dPlay()
     game.printResult()
-    """
-    deck = Deck()
-    deck.shuffle()
-    #print(deck.draw())
-    dealer = Dealer(deck)
-    #dealer.add(Card("Spades", 1))
-    dealer.add(Card("Spades", 11))
-    dealer.play()
-    print(dealer)
-    print(dealer.value(), dealer.bust())
-    """
 
 
 if __name__ == "__main__":

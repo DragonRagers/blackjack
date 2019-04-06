@@ -7,30 +7,88 @@ import time
 states = []
 hits = []
 
+def hardValue(hand):
+    a,b = hand.values()
+    if not a == b:
+        return False,max(a,b)
+    else:
+        return True,a
+
+
+def strat(game):
+    deal = game.dealer.value()
+    hard,value = hardValue(game.player)
+    if hard:
+        if value <= 11:
+            hit = 1
+        elif value == 12:
+            if 4 <= deal <= 6:
+                hit = 0
+            else:
+                hit = 1
+        elif 13 <= value <= 16:
+            if 2 <= deal <= 6:
+                hit = 0
+            else:
+                hit = 1
+        elif value >= 17:
+            hit = 0
+    else:
+        if value <= 17:
+            hit = 1
+        elif value == 18:
+            if deal in [9,10,11]:
+                hit = 1
+            else:
+                hit = 0
+        else:
+            hit = 0
+    return [hard, value, deal], hit
+
 def simulateGames():
     game = Game()
     game.deal()
-    cardState = game.state()
+    game.dPlay()
     while True:
+        #cardState = game.state()
+        ########################################################
         """
-        cardState = [0]*12
-        #cardState = np.array([0]*12)
-        for i, card in enumerate(gameState[0]):
-            cardState[i] = card.rank
-        cardState[11] = gameState[1][0].rank
-        """
-
-        game.pPlay()
-        if game.player.bust():
-            hit = 0
+        hard, value = hardValue(game.player)
+        deal = game.dealer.value()
+        if hard:
+            if value <= 11:
+                hit = 1
+            elif value == 12:
+                if 4 <= deal <= 6:
+                    hit = 0
+                else:
+                    hit = 1
+            elif 13 <= value <= 16:
+                if 2 <= deal <= 6:
+                    hit = 0
+                else:
+                    hit = 1
+            elif value >= 17:
+                hit = 0
         else:
-            hit = 1
-
-        states.append(cardState)
+            if value <= 17:
+                hit = 1
+            elif value == 18:
+                if deal in [9,10,11]:
+                    hit = 1
+                else:
+                    hit = 0
+            else:
+                hit = 0
+        """
+        state, hit = strat(game)
+        states.append(state)
         hits.append(hit)
-
+        ########################################################
         if game.player.bust():
             break
+        game.pPlay()
+
 
 def makeData(n):
     for i in range(n):
@@ -49,36 +107,19 @@ def makeModel():
 
     model = tf.keras.models.Sequential()
     model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(128, activation=tf.nn.relu))
-    model.add(tf.keras.layers.Dense(128, activation=tf.nn.relu))
-    model.add(tf.keras.layers.Dense(128, activation=tf.nn.relu))
+    model.add(tf.keras.layers.Dense(32, activation=tf.nn.relu))
+    model.add(tf.keras.layers.Dense(32, activation=tf.nn.relu))
+    model.add(tf.keras.layers.Dense(32, activation=tf.nn.relu))
     model.add(tf.keras.layers.Dense(2, activation=tf.nn.softmax))
 
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-    model.fit(x_train, y_train, epochs=3)
-    model.save("blackjack.model")
+    model.fit(x_train, y_train, epochs=1)
+    model.save("blackjack{}.model".format(time.time()))
 
-def testModel():
-    model = tf.keras.models.load_model("blackjack.model")
-
-    game = Game()
-    game.deal()
-    gameState = game.state()
-
-    cardState = [0]*12
-    #cardState = np.array([0]*12)
-    for i, card in enumerate(gameState[0]):
-        cardState[i] = card.rank
-    cardState[11] = gameState[1][0].rank
-
-    predictions = model.predict(np.array([cardState]))
-    print(cardState)
-    print(np.argmax(predictions[0]))
 
 def main():
-    #makeData(10000)
+    #makeData(1000000)
     makeModel()
-    #testModle()
 
 
 if __name__ == "__main__":
