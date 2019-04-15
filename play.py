@@ -13,7 +13,7 @@ def hit(state, model):
         return False
 
 # TODO: IMPLEMENT tf.predict() CORRECTLY TO DO IT IN PARALLEL
-def finiteGames(n, model):
+def simulateGames(n, model):
     games = [0,0,0]
     for i in range(n):
         game = Game()
@@ -26,14 +26,32 @@ def finiteGames(n, model):
         game.dPlay()
 
         games[game.result()] += 1
-
     print(games)
+
+
+def contGame(model):
+    while True:
+        game = Game()
+        game.deal()
+
+        printLine()
+        game.printResult()
+        printLine()
+        while hit(game.state(), model):
+            game.pPlay()
+        game.dPlay()
+        game.printResult()
+        printLine()
+
+        n = input("\n\nQuit?(y/n):")
+        if n == "y":
+            break
 
 
 def main():
     model = tf.keras.models.load_model("blackjack.model")
-    finiteGames(10000, model)
-
+    simulateGames(10000, model)
+    #contGame(model)
 
 if __name__ == "__main__":
     main()
