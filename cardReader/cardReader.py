@@ -2,7 +2,11 @@ import numpy as np
 import cv2
 import time
 import tensorflow as tf
+execdir = None
+model = None
 
+
+#returns gray thresholded image
 def threshold(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray,(5,5),0)
@@ -13,6 +17,8 @@ def threshold(img):
     #cv2.imshow("Thresh", thresh)
     return thresh
 
+
+#returns contours in an image sorted by area
 def getContours(thresh):
     contours, heirarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     if len(contours) == 0:
@@ -24,6 +30,7 @@ def getContours(thresh):
     return contours
 
 
+#given contour draw rotated rectangle and (currently commented out) straight bounding rectangle
 def rectangles(cnt, img):
     rect = cv2.minAreaRect(cnt)
     box = np.int0(cv2.boxPoints(rect))
@@ -37,7 +44,7 @@ def rectangles(cnt, img):
     """
 
 
-
+#given contour, draw points on the corners
 def corners(cnt, img, text=""):
     epsilon = 0.1*cv2.arcLength(cnt,True)
     approx = cv2.approxPolyDP(cnt,epsilon,True)
@@ -46,6 +53,7 @@ def corners(cnt, img, text=""):
         cv2.putText(img, text, (approx[0][0][0], approx[0][0][1]+15), cv2.FONT_HERSHEY_SIMPLEX, .7, (0,255,255), 2)
 
 
+#personal attempt at card image extraction, replaced by new isolate function
 """
 def isolate(cnt, img, draw=True):
     rect = cv2.minAreaRect(cnt)
@@ -74,6 +82,7 @@ def isolate(cnt, img, draw=True):
     return out
 """
 
+#given a predetected card contour, extracts the image of the card in a 125x175 BGR image
 def isolate(cnt, img):
     #https://www.pyimagesearch.com/2014/08/25/4-point-opencv-getperspective-transform-example/
     epsilon = 0.05*cv2.arcLength(cnt,True)
@@ -116,7 +125,7 @@ def isolate(cnt, img):
     return warped
 
 
-model = tf.keras.models.load_model("cardID.model")
+#takes a 125x175 gray image of card and returns neural net prediciton of card's rank/value
 def getValue(img):
     num = img[0:40,0:35]
     gray = cv2.cvtColor(num, cv2.COLOR_BGR2GRAY)
@@ -124,6 +133,9 @@ def getValue(img):
     return np.argmax(predictions[0])+1
 
 
+# OPTIMIZE: Currenting calculating things twice with "check if card like" and with drawing
+# find away to not do that
+minArea = 20000 #specific to my camera setup
 def getCards(img):
     thresh = threshold(img)
     cnts = getContours(thresh)
@@ -134,7 +146,12 @@ def getCards(img):
         area = cv2.contourArea(cnt)
         epsilon = 0.1*cv2.arcLength(cnt,True)
         approx = cv2.approxPolyDP(cnt,epsilon,True)
-        if area > 20000 and len(approx) == 4:
+        (_,_), (width, height), angle = cv2.minAreaRect(cnt)
+        try:
+            aspectRatio = max(width, height) / min(width, height)
+        except:
+            aspectRatio = 0.0
+        if area > minArea and 1.35 < aspectRatio < 1.45 and len(approx) == 4:
             card_cnts.append(cnt)
 
     #cv2.drawContours(img, card_cnts, -1, (255,255,255), 2)
@@ -155,6 +172,7 @@ def getCards(img):
     return card_imgs, card_value
 
 
+#takes in network camera stream (raspberry pi right now) and shows feed with card shape and value overlay
 def main():
     img_url = "http://192.168.1.2:8765/picture/1/current/"
     #img_url = "http://192.168.1.2:8081/"
@@ -174,7 +192,7 @@ def main():
         if key == ord('q'):
             break
         """
-        elif key == ord('w'):
+        elif key == ord('w'): #for saving images that were used in neural net model for detecting card rank / value
             filepath = "images\\{}_{}.jpg".format("king", time.time())
             num = card_imgs[0][0:40,0:35]
             cv2.imwrite(filepath, num)
@@ -188,4 +206,6 @@ def main():
 
 
 if __name__ == "__main__":
+    execdir = "cardReader\\{}"
+    model = tf.keras.models.load_model(execdir.format("cardID.model"))
     main()
