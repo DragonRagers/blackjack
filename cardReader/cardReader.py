@@ -61,35 +61,6 @@ def corners(cnt, img, text=""):
         cv2.putText(img, text, (approx[0][0][0], approx[0][0][1]+15), cv2.FONT_HERSHEY_SIMPLEX, .7, (0,255,255), 2)
 
 
-#personal attempt at card image extraction, replaced by new isolate function
-"""
-def isolate(cnt, img, draw=True):
-    rect = cv2.minAreaRect(cnt)
-    box = np.int0(cv2.boxPoints(rect))
-    x1 = min(point[0] for point in box)
-    y1 = min(point[1] for point in box)
-    x2 = max(point[0] for point in box)
-    y2 = max(point[1] for point in box)
-    w = x2 - x1
-    h = y2 - y1
-
-    mask = np.zeros((img.shape[0], img.shape[1]))
-
-    cv2.fillConvexPoly(mask, box, 1)
-    mask = mask.astype(np.bool)
-
-    out = np.zeros_like(img)
-    out[mask] = img[mask]
-    out = out[y1:y2, x1:x2]
-    out = cv2.resize(out, (200,280))
-
-    if draw:
-        cv2.rectangle(img, (x1,y1), (x2,y2), (0,255,0),2)
-        cv2.drawContours(img, [box], -1, (255,0,0), 2)
-    #cv2.imshow("mask", out)
-    return out
-"""
-
 #given a predetected card contour, extracts the image of the card in a 125x175 BGR image
 def isolate(cnt, img):
     #https://www.pyimagesearch.com/2014/08/25/4-point-opencv-getperspective-transform-example/
@@ -197,7 +168,85 @@ def imgText(img, text, pos):
     cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, .7, (255,255,255), 2)
 
 
-#takes in network camera stream (raspberry pi right now) and shows feed with card shape and value overlay
+class contourProperties:
+    def __init__(self, cnt, src):
+        self.cnt = cnt
+        self.src = src
+
+    def getRectangle(self):
+        if not self.rect:
+            rect = cv2.minAreaRect(self.cnt)
+            box = np.int0(cv2.boxPoints(rect))
+            self.rect = box
+        return self.rect
+
+    def corners(self):
+        if not self.corners:
+            epsilon = 0.1*cv2.arcLength(self.cnt,True)
+            approx = cv2.approxPolyDP(self.cnt,epsilon,True)
+            sef.corners = approx
+        return self.corners
+
+    def isolateCard(self):
+        if not self.img:
+            #https://www.pyimagesearch.com/2014/08/25/4-point-opencv-getperspective-transform-example/
+            #calculates what the height of width should be from the rotated rectangle
+            approx = np.float32(self.corners())
+
+            rect = np.zeros((4,2), dtype = "float32")
+            s = np.sum(approx, axis=2)
+            d = np.diff(approx, axis=2)
+            #print("start", approx, "----------\n", s, "-----------\n", d, "end")
+
+            rect[0] = approx[np.argmin(s)]
+            rect[2] = approx[np.argmax(s)]
+            rect[1] = approx[np.argmin(d)]
+            rect[3] = approx[np.argmax(d)]
+            (tl, tr, br, bl) = rect
+
+            widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
+            widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
+            maxWidth = max(int(widthA), int(widthB))
+
+            heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
+            heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
+            maxHeight = max(int(heightA), int(heightB))
+
+            #orients the card vertically
+            if maxWidth > maxHeight:
+                rect = np.roll(rect, 2)
+                maxWidth, maxHeight = maxHeight, maxWidth
+
+            dst = np.array([
+        		[0, 0],
+        		[maxWidth - 1, 0],
+        		[maxWidth - 1, maxHeight - 1],
+        		[0, maxHeight - 1]], dtype = "float32")
+
+            #transforms the contour image into a top down view
+            M = cv2.getPerspectiveTransform(rect, dst)
+            warped = cv2.warpPerspective(self.img, M, (maxWidth, maxHeight))
+
+            #resize to playing card aspect ratio ~ 7/5 or 1.4
+            width = 125 #125
+            height = int(width*7/5)
+            self.img = cv2.resize(warped, (width,height))
+        return self.img
+
+    def getValue(self):
+        if not self.value:
+            #[0:40,0:35] isolates the number on the card based off of 125x175 input image
+            num = img[0:40,0:35]
+            gray = cv2.cvtColor(num, cv2.COLOR_BGR2GRAY)
+            predictions = model.predict(np.array([gray]))
+            self.value = np.argmax(predictions[0])+1
+        return self.value
+
+
+
+
+
+#takes in network camera stream (raspberry pi with motioneye right now) and shows feed with card shape and value overlay
 def main():
     #img_url = "http://192.168.1.2:8765/picture/1/current/"
 
