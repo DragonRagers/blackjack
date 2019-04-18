@@ -2,10 +2,6 @@ import numpy as np
 import cv2
 import time
 import tensorflow as tf
-import copy
-execdir = None
-model = None
-img_url = None
 
 
 #returns gray thresholded image
@@ -50,6 +46,7 @@ class ContourProperties:
         self.img = None
         self.value = None
 
+
     def getRectangle(self):
         if not self.rect:
             rect = cv2.minAreaRect(self.cnt)
@@ -58,12 +55,14 @@ class ContourProperties:
             self.box = np.int0(cv2.boxPoints(self.rect))
         return self.rect, self.box
 
+
     def getCorners(self):
         if self.corners is None:
             epsilon = 0.1*cv2.arcLength(self.cnt,True)
             approx = cv2.approxPolyDP(self.cnt,epsilon,True)
             self.corners = approx
         return self.corners
+
 
     def isolateCard(self):
         if not self.img:
@@ -111,7 +110,8 @@ class ContourProperties:
             self.img = cv2.resize(warped, (width,height))
         return self.img
 
-    def getValue(self):
+
+    def getValue(self, model):
         if not self.value:
             #[0:40,0:35] isolates the number on the card based off of 125x175 input image
             num = self.img[0:40,0:35]
@@ -120,21 +120,26 @@ class ContourProperties:
             self.value = np.argmax(predictions[0])+1
         return self.value
 
+
     def drawRectangle(self, img):
         _,box = self.getRectangle()
         cv2.drawContours(img, [box], -1, (255,0,0), 2)
 
+
     def drawCorners(self, img):
         cv2.drawContours(img, self.getCorners(), -1, (0,0,255), 6)
 
-    def drawValue(self, img):
+
+    # TODO: Find the center of the card on the image and write value there
+    #currently puts it at the top most corner
+    def drawValue(self, img, model):
         #(approx[0][0][0], approx[0][0][1]+15)
         pos = (self.getCorners()[0][0][0], self.getCorners()[0][0][1]+15)
-        cv2.putText(img, str(self.getValue()), pos, cv2.FONT_HERSHEY_SIMPLEX, .7, (0,255,255), 2)
+        cv2.putText(img, str(self.getValue(model)), pos, cv2.FONT_HERSHEY_SIMPLEX, .7, (0,255,255), 2)
 
 
 minArea = 20000 #specific to my camera setup
-def getCards(img):
+def getCards(img, model):
     #threshhold image and return all contours sorted by area
     thresh = threshold(img)
     cnts = getContours(thresh)
@@ -158,8 +163,6 @@ def getCards(img):
         if area > minArea and 1.3 < aspectRatio < 1.5 and len(corners) == 4:
             card_cnts.append(cntProp)#opy.copy(cntProp))
 
-    #cv2.drawContours(img, card_cnts, -1, (255,255,255), 2)
-
     #for each card contour, do something
     card_imgs = []
     card_value = []
@@ -167,7 +170,7 @@ def getCards(img):
         #extract image and rank / value of the card
         card_img = card.isolateCard()
         card_imgs.append(card_img)
-        card_value.append(card.getValue())
+        card_value.append(card.getValue(model))
         #cv2.imshow("card {}".format(i), card_img)
     #again for each card... (seperate for loop so previous loop doesn't have overlay drawn on it)
     for i, card in enumerate(card_cnts):
@@ -176,16 +179,13 @@ def getCards(img):
         #draw corners
         card.drawCorners(img)
         #write value next to card
-        card.drawValue(img)
+        card.drawValue(img, model)
 
     return card_imgs, card_value
 
 
-
 #takes in network camera stream (raspberry pi with motioneye right now) and shows feed with card shape and value overlay
-def main():
-    #img_url = "http://192.168.1.2:8765/picture/1/current/"
-
+def main(img_url, model):
     ret = True
     while ret:
         start = time.time()
@@ -195,7 +195,7 @@ def main():
 
         #get a list of extracted card images and their respective values
         #also adds overlay, possibly need to seperate into different function
-        card_imgs,card_values = getCards(img)
+        card_imgs,card_values = getCards(img, model)
 
         #prints (on image) interations of the for loop per second, calculated by 1/(time per interation)
         imgText(img, "FPS: {}".format(round(1/(time.time()-start))), (30, img.shape[0] - 10))
@@ -223,7 +223,6 @@ def main():
 #static variables are declared here and instantiated at the top of the program so functions can reach them
 #this is likely the wrong way to do it, probably should pass as arguments but its probably fine right now
 if __name__ == "__main__":
-    img_url = "http://192.168.1.2:8765/picture/1/current/"
-    execdir = "cardReader\\{}"
-    model = tf.keras.models.load_model(execdir.format("cardID.model"))
-    main()
+    url = "http://192.168.1.2:8765/picture/1/current/"
+    m = tf.keras.models.load_model("cardReader\\{}".format("cardID.model"))
+    main(url, m)
