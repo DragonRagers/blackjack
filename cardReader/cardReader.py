@@ -6,6 +6,7 @@ execdir = None
 model = None
 img_url = None
 
+
 #returns gray thresholded image
 def threshold(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -13,7 +14,7 @@ def threshold(img):
     #img_w, img_h = np.shape(img)[:2]
     #bkg_level = gray[int(img_h/100)][int(img_w/2)]
     #thresh_level = bkg_level + 60
-    ret, thresh = cv2.threshold(blur, 50, 255, cv2.THRESH_BINARY)
+    ret, thresh = cv2.threshold(blur, 100, 255, cv2.THRESH_BINARY)
     #cv2.imshow("Thresh", thresh)
     return thresh
 
@@ -167,7 +168,7 @@ def getCards(img):
         except:
             aspectRatio = 0.0
         #if meets minimum area, meets expected dimension aspect ratios, and has four corners
-        if area > minArea and 1.35 < aspectRatio < 1.45 and len(approx) == 4:
+        if area > minArea and 1.3 < aspectRatio < 1.5 and len(approx) == 4:
             card_cnts.append(cnt)
 
     #cv2.drawContours(img, card_cnts, -1, (255,255,255), 2)
@@ -191,9 +192,15 @@ def getCards(img):
     return card_imgs, card_value
 
 
+#method for writing white text on the image
+def imgText(img, text, pos):
+    cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, .7, (255,255,255), 2)
+
+
 #takes in network camera stream (raspberry pi right now) and shows feed with card shape and value overlay
 def main():
     #img_url = "http://192.168.1.2:8765/picture/1/current/"
+
     ret = True
     while ret:
         start = time.time()
@@ -204,17 +211,20 @@ def main():
         #get a list of extracted card images and their respective values
         #also adds overlay, possibly need to seperate into different function
         card_imgs,card_values = getCards(img)
-        cv2.imshow("image", img)
 
-        #prints interations of the for loop per second, calculated by 1/(time per interation)
-        print("FPS: {}".format(round(1/(time.time()-start), 1)))
+        #prints (on image) interations of the for loop per second, calculated by 1/(time per interation)
+        imgText(img, "FPS: {}".format(round(1/(time.time()-start))), (30, img.shape[0] - 10))
+        imgText(img, "Hand: {}".format(np.sum(card_values)), (30, img.shape[0] - 40))
+
+        cv2.imshow("Camera Image", img)
 
         #press q to close windows and program
         key = cv2.waitKey(1)
         if key == ord('q'):
             break
+        #for saving images that were used in neural net model for detecting card rank / value
         """
-        elif key == ord('w'): #for saving images that were used in neural net model for detecting card rank / value
+        elif key == ord('w'):
             filepath = "images\\{}_{}.jpg".format("king", time.time())
             num = card_imgs[0][0:40,0:35]
             cv2.imwrite(filepath, num)
