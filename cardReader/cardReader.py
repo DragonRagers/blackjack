@@ -36,7 +36,9 @@ def imgText(img, text, pos):
     cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, .7, (255,255,255), 2)
 
 
+#class for contours that only needs to process features (rectangles, corners, etc) once and saves them to memory
 class ContourProperties:
+    #takes in contour and the source (src) image
     def __init__(self, cnt, src):
         self.cnt = cnt
         self.src = src
@@ -46,7 +48,7 @@ class ContourProperties:
         self.img = None
         self.value = None
 
-
+    #returns rotated rectangle
     def getRectangle(self):
         if not self.rect:
             rect = cv2.minAreaRect(self.cnt)
@@ -55,7 +57,7 @@ class ContourProperties:
             self.box = np.int0(cv2.boxPoints(self.rect))
         return self.rect, self.box
 
-
+    #returns list of the corners of the contour
     def getCorners(self):
         if self.corners is None:
             epsilon = 0.1*cv2.arcLength(self.cnt,True)
@@ -63,7 +65,7 @@ class ContourProperties:
             self.corners = approx
         return self.corners
 
-
+    #returns a 125x175 image of the card extracted from the source image
     def isolateCard(self):
         if not self.img:
             #https://www.pyimagesearch.com/2014/08/25/4-point-opencv-getperspective-transform-example/
@@ -110,7 +112,7 @@ class ContourProperties:
             self.img = cv2.resize(warped, (width,height))
         return self.img
 
-
+    #runs neural net on the card in order to predict its rank/value
     def getValue(self, model):
         if not self.value:
             #[0:40,0:35] isolates the number on the card based off of 125x175 input image
@@ -120,25 +122,25 @@ class ContourProperties:
             self.value = np.argmax(predictions[0])+1
         return self.value
 
-
+    #draws rotated rectangle on image (can't used self.src since its a copy?)
     def drawRectangle(self, img):
         _,box = self.getRectangle()
         cv2.drawContours(img, [box], -1, (255,0,0), 2)
 
-
+    #draws corners on image
     def drawCorners(self, img):
         cv2.drawContours(img, self.getCorners(), -1, (0,0,255), 6)
 
-
     # TODO: Find the center of the card on the image and write value there
     #currently puts it at the top most corner
+    #writes the predicted rank/value of the card on the image
     def drawValue(self, img, model):
         #(approx[0][0][0], approx[0][0][1]+15)
         pos = (self.getCorners()[0][0][0], self.getCorners()[0][0][1]+15)
         cv2.putText(img, str(self.getValue(model)), pos, cv2.FONT_HERSHEY_SIMPLEX, .7, (0,255,255), 2)
 
 
-minArea = 20000 #specific to my camera setup
+minArea = 20000 #specific to my camera setup, cameras farther away from the cards would want a smaller minArea
 def getCards(img, model):
     #threshhold image and return all contours sorted by area
     thresh = threshold(img)
@@ -148,18 +150,19 @@ def getCards(img, model):
     #tests all contours and checks if they have "card-like" aspects and adds those to card contours list
     card_cnts = []
     for cnt in cnts:
+        #creates ContourProperties instance and calculates various properties
         cntProp = ContourProperties(cnt, img)
-
         area = cv2.contourArea(cnt)
         corners = cntProp.getCorners()
         rect,_ =  cntProp.getRectangle()
         (_,_), (width, height), _ = rect
+        #calculate aspect ratio of rotated rectangle
         try: #try except in case of division by zero error
             aspectRatio = max(width, height) / min(width, height)
         except:
             aspectRatio = 0.0
 
-        #if meets minimum area, meets expected dimension aspect ratios, and has four corners
+        #if meets minimum area, meets expected dimension aspect ratios, and has four corners, then its probably a card
         if area > minArea and 1.3 < aspectRatio < 1.5 and len(corners) == 4:
             card_cnts.append(cntProp)#opy.copy(cntProp))
 
@@ -172,11 +175,10 @@ def getCards(img, model):
         card_imgs.append(card_img)
         card_value.append(card.getValue(model))
         #cv2.imshow("card {}".format(i), card_img)
-    #again for each card... (seperate for loop so previous loop doesn't have overlay drawn on it)
-    for i, card in enumerate(card_cnts):
+
         #draw rectangles around the card
         card.drawRectangle(img)
-        #draw corners
+        #draw corners of the card
         card.drawCorners(img)
         #write value next to card
         card.drawValue(img, model)
